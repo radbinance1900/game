@@ -1,0 +1,156 @@
+/* Pixel square font from Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #000000;
+  font-family: system-ui, -apple-system, sans-serif;
+  color: #fff;
+  overflow-x: hidden;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  padding: 20px;
+}
+
+/* The Main Eye Display Canvas */
+#display {
+  width: 512px;
+  height: 256px;
+  background: #000;
+  border-radius: 12px;
+  border: 1px solid #333;
+  transition: filter 1s ease;
+}
+
+/* Red eyes when distracted */
+#display.red-eyes {
+  filter: sepia(100%) saturate(300%) hue-rotate(-20deg);
+}
+
+/* Retro Timer */
+#timer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 512px;
+  height: 56px;
+  background: #000;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 28px;
+  letter-spacing: 3px;
+  color: #ffffff;
+}
+
+#timer.distracted {
+  color: #ff6b6b;
+  animation: distracted-pulse 1s ease-in-out infinite;
+}
+
+@keyframes distracted-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* Camera Preview & Overlays */
+#camera-container {
+  position: relative;
+  width: 320px;
+  height: 240px;
+  border: 2px solid #fff;
+  background: #000;
+}
+
+#camera {
+  width: 100%;
+  height: 100%;
+  transform: scaleX(-1); /* Mirror effect */
+  display: block;
+  object-fit: cover;
+}
+
+#camera-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  transform: scaleX(-1);
+}
+
+/* Status Bar Below Camera */
+#status {
+  width: 320px;
+  font-family: monospace;
+  font-size: 11px;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 8px 16px;
+  background: #000;
+  border: 2px solid #333;
+}
+
+#status.loading { color: #f0a500; border-color: #f0a500; }
+#status.ready { color: #4ecca3; border-color: #4ecca3; }
+#status.error { color: #ff6b6b; border-color: #ff6b6b; }
+
+/* Debug Panel */
+#debug {
+  font-family: monospace;
+  font-size: 11px;
+  width: 320px;
+  background: #000;
+  border: 2px solid #fff;
+  color: #888;
+}
+
+#debug-header {
+  background: #fff;
+  color: #000;
+  padding: 6px 10px;
+  font-weight: bold;
+  text-transform: uppercase;
+  font-size: 10px;
+}
+
+#debug-content {
+  padding: 10px;
+}
+
+/* Settings Gear Button */
+#debug-toggle {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid #333;
+  background: #111;
+  color: #666;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#debug-toggle:hover {
+  color: #fff;
+  border-color: #fff;
+}
