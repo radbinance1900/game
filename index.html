@@ -3,192 +3,82 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FocusFinder Official</title>
-    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3" type="text/javascript"></script>
+    <title>My Private FocusFinder</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_detection"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/face-detection"></script>
+    
     <style>
-        :root { --bg: #000; --white: #fff; --green: #4ecca3; --red: #ff6b6b; }
-        body { background: var(--bg); color: var(--white); font-family: 'Press Start 2P', cursive; display: flex; flex-direction: column; align-items: center; min-height: 100vh; margin: 0; overflow-x: hidden; }
-        
-        #ist-clock { margin-top: 20px; font-size: 12px; color: #666; }
-        #eyeCanvas { width: 320px; height: 160px; margin-top: 30px; image-rendering: pixelated; }
-        
-        #timer { font-size: 3.5rem; margin: 25px 0; color: #333; transition: color 0.3s; }
-        .active-focus #timer { color: var(--green); text-shadow: 0 0 15px var(--green); }
-        .active-distract #timer { color: var(--red); text-shadow: 0 0 15px var(--red); }
-
-        #status-box { font-size: 10px; color: #888; border: 1px solid #222; padding: 10px; min-width: 280px; text-align: center; }
-        #controls { margin-top: 30px; }
-        
-        button { background: #111; color: #fff; border: 2px solid #444; padding: 15px 25px; font-family: 'Press Start 2P'; font-size: 10px; cursor: pointer; }
-        button:disabled { opacity: 0.3; }
-        button:hover:not(:disabled) { border-color: var(--green); }
-
-        #calendar { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-top: 20px; width: 320px; }
-        .day { aspect-ratio: 1; background: #111; display: flex; align-items: center; justify-content: center; font-size: 8px; color: #444; }
-        .day.filled { background: var(--green); color: #000; }
-
-        /* Camera hidden but active */
-        #v { position: absolute; width: 1px; height: 1px; opacity: 0; }
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #121212; color: white; }
+        #container { position: relative; margin-top: 20px; }
+        video, canvas { position: absolute; top: 0; left: 0; border-radius: 10px; }
+        #status { margin-top: 500px; font-size: 1.5rem; padding: 10px; border-radius: 5px; }
+        .focused { background: green; }
+        .distracted { background: red; }
     </style>
 </head>
 <body>
 
-    <div id="ist-clock">IST: --:--:--</div>
-    <canvas id="eyeCanvas" width="320" height="160"></canvas>
-    <div id="timer">00:00:00</div>
-    <div id="status-box">SYSTEM: INITIALIZING...</div>
-    
-    <div id="controls">
-        <button id="btn" disabled>LOADING AI...</button>
+    <h1>Private Focus Finder</h1>
+    <div id="status" class="distracted">Initializing AI...</div>
+
+    <div id="container">
+        <video id="webcam" autoplay playsinline width="640" height="480"></video>
+        <canvas id="output"></canvas>
     </div>
 
-    <div id="calendar"></div>
-
-    <video id="v" autoplay playsinline></video>
-
-    <script type="module">
-        // Import MediaPipe
-        import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.mjs";
-
-        const v = document.getElementById('v');
-        const canvas = document.getElementById('eyeCanvas');
+    <script>
+        const video = document.getElementById('webcam');
+        const canvas = document.getElementById('output');
+        const statusDiv = document.getElementById('status');
         const ctx = canvas.getContext('2d');
-        const timerEl = document.getElementById('timer');
-        const statusEl = document.getElementById('status-box');
-        const btn = document.getElementById('btn');
-        const clockEl = document.getElementById('ist-clock');
 
-        let landmarker;
-        let isFocused = false;
-        let sessionActive = false;
-        let totalSecs = 0;
-        let lastTime = -1;
-        let todayKey = new Date().toISOString().split('T')[0];
-
-        // 1. ANIMATION LOOP (Eyes)
-        function draw(state) {
-            ctx.clearRect(0, 0, 320, 160);
-            ctx.fillStyle = (state === 'distract') ? "#ff6b6b" : "#fff";
-            
-            [80, 200].forEach(x => {
-                // Precise Pixel Eyes from image_185019.png
-                ctx.fillRect(x, 50, 60, 50); // Base
-                ctx.clearRect(x, 50, 8, 8); // Top-Left Rounding
-                ctx.clearRect(x+52, 50, 8, 8); // Top-Right Rounding
-                ctx.clearRect(x+15, 92, 30, 8); // Bottom Arch/Cut
+        async function setupCamera() {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            video.srcObject = stream;
+            return new Promise((resolve) => {
+                video.onloadedmetadata = () => resolve(video);
             });
         }
 
-        // 2. IST & TIMER LOGIC (Runs every 1 second)
-        setInterval(() => {
-            clockEl.innerText = "IST: " + new Date().toLocaleTimeString('en-IN', {timeZone: 'Asia/Kolkata', hour12: false});
+        async function main() {
+            const model = faceDetection.SupportedModels.MediaPipeFaceDetector;
+            const detector = await faceDetection.createDetector(model, { runtime: 'tfjs' });
             
-            if (sessionActive && isFocused) {
-                totalSecs++;
-                const h = Math.floor(totalSecs / 3600).toString().padStart(2, '0');
-                const m = Math.floor((totalSecs % 3600) / 60).toString().padStart(2, '0');
-                const s = (totalSecs % 60).toString().padStart(2, '0');
-                timerEl.innerText = `${h}:${m}:${s}`;
+            await setupCamera();
+            video.play();
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+
+            statusDiv.innerText = "Scanning for Face...";
+
+            async function detect() {
+                const faces = await detector.estimateFaces(video);
                 
-                if (totalSecs % 5 === 0) save(); // Save every 5s
-            }
-        }, 1000);
-
-        // 3. AI TRACKING ENGINE
-        async function predict() {
-            if (sessionActive && v.currentTime !== lastTime) {
-                lastTime = v.currentTime;
-                const res = landmarker.detectForVideo(v, performance.now());
-
-                if (res.faceLandmarks && res.faceLandmarks.length > 0) {
-                    const blend = res.faceBlendshapes[0].categories;
-                    const smile = blend.find(b => b.categoryName === "mouthSmileLeft").score;
-                    const nose = res.faceLandmarks[0][1];
-                    const forehead = res.faceLandmarks[0][10];
-                    const pitch = forehead.y - nose.y;
-
-                    if (smile > 0.4) {
-                        isFocused = false;
-                        statusEl.innerText = "STATUS: DISTRACTED (SMILING)";
-                        document.body.className = "active-distract";
-                        draw('distract');
-                    } else if (pitch > 0.18) { // User is looking down at a book
-                        isFocused = true;
-                        statusEl.innerText = "STATUS: READING (FOCUSED)";
-                        document.body.className = "active-focus";
-                        draw('focus');
-                    } else {
-                        isFocused = true;
-                        statusEl.innerText = "STATUS: STUDYING";
-                        document.body.className = "active-focus";
-                        draw('focus');
-                    }
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                if (faces.length > 0) {
+                    statusDiv.innerText = "STATUS: FOCUSING";
+                    statusDiv.className = "focused";
+                    
+                    // Draw box around face (Visual debug)
+                    faces.forEach(face => {
+                        ctx.strokeStyle = "#00FF00";
+                        ctx.lineWidth = 2;
+                        ctx.strokeRect(face.box.xMin, face.box.yMin, face.box.width, face.box.height);
+                    });
                 } else {
-                    isFocused = false;
-                    statusEl.innerText = "STATUS: USER NOT FOUND";
-                    document.body.className = "active-distract";
-                    draw('distract');
+                    statusDiv.innerText = "STATUS: DISTRACTED / NOT AT DESK";
+                    statusDiv.className = "distracted";
                 }
+
+                requestAnimationFrame(detect);
             }
-            if (sessionActive) requestAnimationFrame(predict);
+            detect();
         }
 
-        // 4. PERSISTENCE
-        function save() {
-            const log = JSON.parse(localStorage.getItem('focus_log_v5') || '{}');
-            log[todayKey] = totalSecs;
-            localStorage.setItem('focus_log_v5', JSON.stringify(log));
-        }
-
-        function load() {
-            const log = JSON.parse(localStorage.getItem('focus_log_v5') || '{}');
-            totalSecs = log[todayKey] || 0;
-            // Build Calendar
-            const cal = document.getElementById('calendar');
-            cal.innerHTML = '';
-            for(let i=27; i>=0; i--) {
-                const d = new Date(); d.setDate(d.getDate()-i);
-                const k = d.toISOString().split('T')[0];
-                const div = document.createElement('div');
-                div.className = `day ${log[k] > 60 ? 'filled' : ''}`;
-                div.innerText = d.getDate();
-                cal.appendChild(div);
-            }
-        }
-
-        // 5. STARTUP
-        async function init() {
-            const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm");
-            landmarker = await FaceLandmarker.createFromOptions(vision, {
-                baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`, delegate: "GPU" },
-                outputFaceBlendshapes: true, runningMode: "VIDEO", numFaces: 1
-            });
-            load();
-            statusEl.innerText = "SYSTEM: ONLINE";
-            btn.innerText = "START SESSION";
-            btn.disabled = false;
-            draw('focus');
-        }
-
-        btn.addEventListener('click', () => {
-            if (!sessionActive) {
-                navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } }).then(s => {
-                    v.srcObject = s;
-                    sessionActive = true;
-                    btn.innerText = "PAUSE";
-                    predict();
-                }).catch(() => alert("Camera Required"));
-            } else {
-                sessionActive = false;
-                isFocused = false;
-                btn.innerText = "RESUME";
-                statusEl.innerText = "SYSTEM: PAUSED";
-                document.body.className = "";
-            }
-        });
-
-        init();
+        main();
     </script>
 </body>
 </html>
