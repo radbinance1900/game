@@ -3,83 +3,135 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FocusBot v4 - Reactive Eyes</title>
+    <title>FocusFinder v5</title>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs" type="module"></script>
     <style>
         :root {
-            --bg-color: #000;
-            --text-color: #fff;
-            --accent: #4ecca3;
-            --warn: #ff6b6b;
-            --dim: #333;
+            --bg: #000;
+            --white: #fff;
+            --focus-green: #4ecca3;
+            --distract-red: #ff6b6b;
+            --dim-gray: #333;
         }
 
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            margin: 0; background: var(--bg-color); color: var(--text-color);
+            background: var(--bg);
+            color: var(--white);
             font-family: 'Press Start 2P', cursive;
-            display: flex; flex-direction: column; align-items: center; min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            overflow-x: hidden;
         }
 
-        #ist-clock { margin-top: 20px; font-size: 10px; color: #666; }
-
-        /* Eye Canvas Styling */
-        #robot-container { margin-top: 30px; width: 320px; height: 140px; }
-        canvas#eyesCanvas { width: 100%; height: 100%; image-rendering: pixelated; }
-
-        /* Timer Section */
-        #timer-wrap { text-align: center; margin-top: 20px; }
-        #timer { font-size: 3rem; color: var(--dim); transition: 0.2s; }
-        .is-focusing #timer { color: var(--accent); text-shadow: 0 0 20px var(--accent); }
-        .is-distracted #timer { color: var(--warn); text-shadow: 0 0 20px var(--warn); }
-
-        #status-box {
-            margin-top: 15px; font-size: 9px; padding: 10px;
-            border: 1px solid #222; min-width: 250px; text-align: center;
+        /* Top Clock */
+        #ist-header {
+            margin-top: 15px;
+            font-size: 10px;
+            color: #888;
+            letter-spacing: 1px;
         }
 
-        #controls { margin-top: 20px; }
+        /* Robot Eyes Area */
+        #robot-box {
+            width: 320px;
+            height: 150px;
+            margin-top: 20px;
+            position: relative;
+        }
+        canvas#eyeCanvas {
+            width: 100%;
+            height: 100%;
+            image-rendering: pixelated;
+        }
+
+        /* Timer Display */
+        #timer-container {
+            margin-top: 10px;
+            text-align: center;
+        }
+        #timer {
+            font-size: 3.2rem;
+            color: var(--dim-gray);
+            transition: all 0.2s ease;
+        }
+        .focused #timer { color: var(--focus-green); text-shadow: 0 0 15px var(--focus-green); }
+        .distracted #timer { color: var(--distract-red); text-shadow: 0 0 15px var(--distract-red); }
+
+        /* Status & Logs */
+        #status-msg {
+            margin-top: 20px;
+            font-size: 9px;
+            color: #666;
+            text-transform: uppercase;
+        }
+
+        #controls { margin-top: 25px; }
         button {
-            padding: 15px 20px; font-family: 'Press Start 2P'; font-size: 10px;
-            background: #111; color: white; border: 2px solid #444; cursor: pointer;
+            background: #111;
+            color: #fff;
+            border: 2px solid var(--dim-gray);
+            padding: 15px 25px;
+            font-family: 'Press Start 2P';
+            font-size: 10px;
+            cursor: pointer;
         }
-        button:disabled { opacity: 0.3; cursor: not-allowed; }
-        button:hover:not(:disabled) { border-color: var(--accent); }
+        button:disabled { opacity: 0.3; cursor: wait; }
+        button:hover:not(:disabled) { border-color: var(--focus-green); }
 
-        /* Stats */
-        #stats-panel {
-            width: 90%; max-width: 450px; background: #0a0a0a;
-            padding: 15px; border: 2px solid #222; margin: 40px 0; font-size: 8px;
+        #calendar-panel {
+            width: 90%;
+            max-width: 460px;
+            background: #0a0a0a;
+            border: 2px solid #222;
+            padding: 15px;
+            margin: 30px 0;
+            font-size: 8px;
         }
-        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 10px; }
-        .day-cell { aspect-ratio: 1; background: #1a1a1a; display: flex; align-items: center; justify-content: center; }
-        .day-active { background: var(--accent); color: #000; }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 5px;
+            margin-top: 10px;
+        }
+        .day {
+            aspect-ratio: 1;
+            background: #151515;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #444;
+        }
+        .active-day { background: var(--focus-green); color: #000; }
 
-        /* Camera is invisible */
-        #webcam { position: absolute; width: 1px; height: 1px; opacity: 0; }
+        /* Camera (Hidden) */
+        #webcam { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
     </style>
 </head>
-<body class="is-distracted">
+<body>
 
-    <div id="ist-clock">IST: --:--:--</div>
+    <div id="ist-header">IST: --:--:--</div>
 
-    <div id="robot-container">
-        <canvas id="eyesCanvas" width="320" height="140"></canvas>
+    <div id="robot-box">
+        <canvas id="eyeCanvas" width="320" height="150"></canvas>
     </div>
 
-    <div id="timer-wrap">
+    <div id="timer-container">
         <div id="timer">00:00:00</div>
     </div>
 
-    <div id="status-box">LOADING SYSTEM...</div>
+    <div id="status-msg">Booting AI Brain...</div>
 
     <div id="controls">
-        <button id="startBtn" disabled>START SESSION</button>
+        <button id="mainBtn" disabled>PLEASE WAIT...</button>
     </div>
 
-    <div id="stats-panel">
-        <div>30-DAY LOG</div>
-        <div id="calendar" class="calendar-grid"></div>
+    <div id="calendar-panel">
+        <div>YEARLY FOCUS LOG</div>
+        <div id="calendar-grid" class="grid"></div>
     </div>
 
     <video id="webcam" autoplay playsinline></video>
@@ -88,186 +140,205 @@
         import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs";
 
         const video = document.getElementById('webcam');
-        const canvas = document.getElementById('eyesCanvas');
+        const canvas = document.getElementById('eyeCanvas');
         const ctx = canvas.getContext('2d');
         const timerEl = document.getElementById('timer');
-        const statusEl = document.getElementById('status-box');
-        const startBtn = document.getElementById('startBtn');
-        const istEl = document.getElementById('ist-clock');
+        const istEl = document.getElementById('ist-header');
+        const statusEl = document.getElementById('status-msg');
+        const mainBtn = document.getElementById('mainBtn');
 
         let faceLandmarker;
+        let runningMode = "VIDEO";
         let sessionActive = false;
         let isFocused = false;
-        let totalSeconds = 0;
         let lastVideoTime = -1;
-        let currentDayKey = new Date().toLocaleDateString('en-CA');
-
-        // --- Robot Animation State ---
-        let blinkScale = 1;
-        let lookX = 0;
+        let totalSecondsToday = 0;
         let lastBlink = Date.now();
+        let blinkY = 1.0;
 
-        // 1. Setup IST & Auto-Save
-        function updateIST() {
-            istEl.innerText = "IST: " + new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false });
-            if (sessionActive && isFocused) {
-                totalSeconds++;
-                renderTimer();
-                if (totalSeconds % 5 === 0) saveProgress();
+        // Audio Alert
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playAlert() {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            osc.connect(g); g.connect(audioCtx.destination);
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+            osc.start(); osc.stop(audioCtx.currentTime + 0.3);
+        }
+
+        // 1. Load AI and Data
+        async function initialize() {
+            try {
+                const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm");
+                faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+                    baseOptions: { 
+                        modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
+                        delegate: "GPU" 
+                    },
+                    outputFaceBlendshapes: true,
+                    runningMode: runningMode,
+                    numFaces: 1
+                });
+                loadProgress();
+                renderCalendar();
+                statusEl.innerText = "System Ready";
+                mainBtn.innerText = "START FOCUSING";
+                mainBtn.disabled = false;
+                animate(); 
+            } catch (e) {
+                statusEl.innerText = "Error: Camera or AI failed";
             }
         }
-        setInterval(updateIST, 1000);
 
-        function renderTimer() {
-            const h = Math.floor(totalSeconds / 3600).toString().padStart(2, '0');
-            const m = Math.floor((totalSeconds % 3600) / 60).toString().padStart(2, '0');
-            const s = (totalSeconds % 60).toString().padStart(2, '0');
+        // 2. IST Clock & Timer Logic
+        setInterval(() => {
+            // IST Update
+            istEl.innerText = "IST: " + new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour12: false });
+            
+            // Timer logic: Strictly requires session to be ON and AI to see FOCUS
+            if (sessionActive && isFocused) {
+                totalSecondsToday++;
+                updateTimerDisplay();
+                if (totalSecondsToday % 5 === 0) saveProgress(); // Auto-save every 5s
+            }
+        }, 1000);
+
+        function updateTimerDisplay() {
+            const h = Math.floor(totalSecondsToday / 3600).toString().padStart(2, '0');
+            const m = Math.floor((totalSecondsToday % 3600) / 60).toString().padStart(2, '0');
+            const s = (totalSecondsToday % 60).toString().padStart(2, '0');
             timerEl.innerText = `${h}:${m}:${s}`;
         }
 
-        // 2. Robot Art Logic
-        function drawRobot() {
+        // 3. Robot Eyes (Matching your pixel style)
+        function drawEyes() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // Random Blinking
-            if (Date.now() - lastBlink > 4000) {
-                blinkScale = 0.1;
-                if (Date.now() - lastBlink > 4150) {
+            // Blink logic
+            if (Date.now() - lastBlink > 3500) {
+                blinkY = 0.1;
+                if (Date.now() - lastBlink > 3650) {
                     lastBlink = Date.now();
-                    blinkScale = 1;
+                    blinkY = 1.0;
                 }
             }
 
-            const eyeColor = isFocused ? "#4ecca3" : "#ff6b6b";
-            ctx.fillStyle = eyeColor;
+            const color = isFocused ? "#fff" : "#ff6b6b";
+            ctx.fillStyle = color;
 
-            // Draw two eyes
-            [80, 200].forEach(baseX => {
-                const x = baseX + lookX;
-                const y = 40;
-                const w = 60;
-                const h = 60 * blinkScale;
-                
-                if (isFocused && !sessionActive) ctx.globalAlpha = 0.3;
-                else ctx.globalAlpha = 1.0;
+            // Drawing the two rounded-top pixel eyes
+            [70, 190].forEach(x => {
+                const eyeW = 60;
+                const eyeH = 50 * blinkY;
+                const yPos = 50 + (50 - eyeH) / 2;
 
-                // Simple Pixel Eye
-                ctx.fillRect(x, y + (60 - h)/2, w, h);
-                
-                // Reading mode detail
-                if (statusEl.innerText === "READING...") {
-                    ctx.fillStyle = "#000";
-                    ctx.fillRect(x, y, w, 15); // Eyelids partially closed from top
-                    ctx.fillStyle = eyeColor;
-                }
+                // Main Rect
+                ctx.fillRect(x, yPos, eyeW, eyeH);
+                // Rounded top corners (subtracting pixels)
+                ctx.clearRect(x, yPos, 5, 5);
+                ctx.clearRect(x + eyeW - 5, yPos, 5, 5);
+                // The "cut" at the bottom seen in your image
+                ctx.clearRect(x + 10, yPos + eyeH - 5, eyeW - 20, 5);
             });
-
-            requestAnimationFrame(drawRobot);
         }
 
-        // 3. AI Processing
-        async function runAI() {
-            if (video.currentTime !== lastVideoTime) {
+        // 4. AI Tracking Loop
+        async function detect() {
+            if (sessionActive && video.currentTime !== lastVideoTime) {
                 lastVideoTime = video.currentTime;
-                const results = faceLandmarker.detectForVideo(video, performance.now());
+                const result = faceLandmarker.detectForVideo(video, performance.now());
 
-                if (results.faceLandmarks && results.faceLandmarks.length > 0) {
-                    const blend = results.faceBlendshapes[0].categories;
+                if (result.faceLandmarks && result.faceLandmarks.length > 0) {
+                    const blend = result.faceBlendshapes[0].categories;
                     const smile = blend.find(b => b.categoryName === "mouthSmileLeft").score;
                     
-                    // Head Tilt (Pitch)
-                    const nose = results.faceLandmarks[0][1];
-                    const forehead = results.faceLandmarks[0][10];
+                    // Head Pitch (for Reading Book)
+                    const nose = result.faceLandmarks[0][1];
+                    const forehead = result.faceLandmarks[0][10];
                     const pitch = forehead.y - nose.y;
 
                     if (smile > 0.4) {
+                        if (isFocused) playAlert(); // Only beep on transition
                         isFocused = false;
-                        statusEl.innerText = "DISTRACTED: SMILING";
-                        document.body.className = "is-distracted";
-                        lookX = 5; 
-                    } else if (pitch > 0.16) {
+                        statusEl.innerText = "Distracted: Smiling";
+                        document.body.className = "distracted";
+                    } else if (pitch > 0.17) {
                         isFocused = true;
-                        statusEl.innerText = "READING...";
-                        document.body.className = "is-focusing";
-                        lookX = 0;
+                        statusEl.innerText = "Reading Mode (Focused)";
+                        document.body.className = "focused";
                     } else {
                         isFocused = true;
-                        statusEl.innerText = "EYE CONTACT: FOCUSING";
-                        document.body.className = "is-focusing";
-                        lookX = 0;
+                        statusEl.innerText = "Focused";
+                        document.body.className = "focused";
                     }
                 } else {
                     isFocused = false;
-                    statusEl.innerText = "EYE CONTACT LOST";
-                    document.body.className = "is-distracted";
+                    statusEl.innerText = "User Lost";
+                    document.body.className = "distracted";
                 }
             }
-            if (sessionActive) requestAnimationFrame(runAI);
+            if (sessionActive) requestAnimationFrame(detect);
         }
 
-        // 4. Initialization
-        async function init() {
-            statusEl.innerText = "DOWNLOADING AI BRAIN...";
-            const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm");
-            faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
-                baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`, delegate: "GPU" },
-                outputFaceBlendshapes: true,
-                runningMode: "VIDEO",
-                numFaces: 1
-            });
-            
-            loadData();
-            statusEl.innerText = "SYSTEM ONLINE";
-            startBtn.disabled = false;
-            drawRobot();
+        function animate() {
+            drawEyes();
+            requestAnimationFrame(animate);
         }
 
+        // 5. Persistence & Calendar
         function saveProgress() {
-            const data = JSON.parse(localStorage.getItem('focus_v4') || '{}');
-            data[currentDayKey] = totalSeconds;
-            localStorage.setItem('focus_v4', JSON.stringify(data));
+            const dateKey = new Date().toLocaleDateString('en-CA');
+            const log = JSON.parse(localStorage.getItem('ff_logs') || '{}');
+            log[dateKey] = totalSecondsToday;
+            localStorage.setItem('ff_logs', JSON.stringify(log));
         }
 
-        function loadData() {
-            const data = JSON.parse(localStorage.getItem('focus_v4') || '{}');
-            totalSeconds = data[currentDayKey] || 0;
-            renderTimer();
-            renderCalendar();
+        function loadProgress() {
+            const dateKey = new Date().toLocaleDateString('en-CA');
+            const log = JSON.parse(localStorage.getItem('ff_logs') || '{}');
+            totalSecondsToday = log[dateKey] || 0;
+            updateTimerDisplay();
         }
 
         function renderCalendar() {
-            const grid = document.getElementById('calendar');
+            const grid = document.getElementById('calendar-grid');
             grid.innerHTML = '';
-            const data = JSON.parse(localStorage.getItem('focus_v4') || '{}');
+            const log = JSON.parse(localStorage.getItem('ff_logs') || '{}');
+            // Show last 28 days
             for (let i = 27; i >= 0; i--) {
                 const d = new Date(); d.setDate(d.getDate() - i);
                 const key = d.toLocaleDateString('en-CA');
                 const cell = document.createElement('div');
-                cell.className = `day-cell ${data[key] > 60 ? 'day-active' : ''}`;
+                cell.className = `day ${log[key] > 60 ? 'active-day' : ''}`;
                 cell.innerText = d.getDate();
                 grid.appendChild(cell);
             }
         }
 
-        // 5. Controls
-        startBtn.addEventListener('click', () => {
+        // 6. UI Interaction
+        mainBtn.addEventListener('click', () => {
             if (!sessionActive) {
                 navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
                     video.srcObject = stream;
                     sessionActive = true;
-                    startBtn.innerText = "PAUSE";
-                    runAI();
+                    mainBtn.innerText = "STOP SESSION";
+                    detect();
                 });
             } else {
                 sessionActive = false;
                 isFocused = false;
-                startBtn.innerText = "RESUME";
-                statusEl.innerText = "SESSION PAUSED";
-                document.body.className = "is-distracted";
+                mainBtn.innerText = "START FOCUSING";
+                statusEl.innerText = "Paused";
+                document.body.className = "";
+                saveProgress();
+                renderCalendar();
             }
         });
 
-        init();
+        initialize();
     </script>
 </body>
 </html>
