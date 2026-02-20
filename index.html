@@ -13,7 +13,6 @@
             --accent-color: #4ecca3;
             --warn-color: #ff6b6b;
         }
-
         body {
             margin: 0;
             background: var(--bg-color);
@@ -26,45 +25,48 @@
             overflow-x: hidden;
         }
 
-        /* Top Bar Clock */
-        #ist-clock {
-            margin-top: 20px;
-            font-size: 14px;
-            color: #aaa;
-            border: 1px solid #333;
-            padding: 10px;
+        /* Prominent IST Watch at Top */
+        #ist-watch {
+            margin: 25px 0 15px;
+            padding: 12px 24px;
+            font-size: 28px;
+            font-weight: bold;
+            background: #111;
+            border: 3px solid #444;
+            border-radius: 12px;
+            box-shadow: 0 0 20px rgba(78, 204, 163, 0.15);
+            letter-spacing: 2px;
         }
 
         /* Robot Eyes */
         #robot-container {
-            margin-top: 40px;
+            margin-top: 20px;
             width: 300px;
             height: 150px;
         }
-
         canvas#eyesCanvas {
             width: 100%;
             image-rendering: pixelated;
         }
 
         /* Session Timer */
-        #timer-label { font-size: 10px; color: #666; margin-top: 20px; }
+        #timer-label { font-size: 10px; color: #666; margin-top: 25px; }
         #timer {
-            font-size: 3rem;
+            font-size: 3.5rem;
             margin: 10px 0;
             transition: color 0.3s;
         }
-
         .distracted #timer { color: var(--warn-color); text-shadow: 0 0 10px red; }
         .focused #timer { color: var(--accent-color); text-shadow: 0 0 10px var(--accent-color); }
 
-        /* Hidden Camera */
+        /* Completely hide camera */
         #webcam {
-            position: absolute;
+            display: none !important;
             width: 1px;
             height: 1px;
             opacity: 0;
             pointer-events: none;
+            position: absolute;
         }
 
         /* Stats & Calendar */
@@ -77,14 +79,12 @@
             margin: 30px 0;
             font-size: 10px;
         }
-
         .calendar-grid {
             display: grid;
             grid-template-columns: repeat(7, 1fr);
             gap: 5px;
             margin-top: 15px;
         }
-
         .day-cell {
             aspect-ratio: 1;
             background: #222;
@@ -94,15 +94,14 @@
             align-items: center;
             justify-content: center;
         }
-
         .day-active { background: var(--accent-color); color: #000; }
 
         /* Controls */
-        #controls { margin-top: 10px; display: flex; gap: 10px; }
+        #controls { margin-top: 15px; display: flex; gap: 12px; }
         button {
-            padding: 12px 18px;
+            padding: 12px 20px;
             font-family: 'Press Start 2P';
-            font-size: 10px;
+            font-size: 11px;
             background: #222;
             color: white;
             border: 2px solid #444;
@@ -111,7 +110,7 @@
         button:hover { background: #333; border-color: var(--accent-color); }
 
         #status-text {
-            margin-top: 15px;
+            margin-top: 20px;
             font-size: 11px;
             color: #555;
             text-transform: uppercase;
@@ -119,30 +118,26 @@
     </style>
 </head>
 <body>
-
-    <div id="ist-clock">IST: LOADING...</div>
-
+    <div id="ist-watch">IST: LOADING...</div>
     <div id="robot-container">
         <canvas id="eyesCanvas" width="300" height="150"></canvas>
     </div>
-
     <div id="timer-label">STUDY SESSION TIME</div>
     <div id="timer">00:00:00</div>
-    
+   
     <div id="controls">
         <button id="startBtn">SYNC & START</button>
         <button id="toggleAudio">BEEP: ON</button>
     </div>
-
     <div id="status-text">Waking up focus modules...</div>
-
     <div id="stats-panel">
         <div>30-DAY FOCUS LOG</div>
         <div id="calendar" class="calendar-grid"></div>
         <p id="total-stats" style="margin-top: 15px; color: #888;"></p>
     </div>
 
-    <video id="webcam" autoplay playsinline></video>
+    <!-- Camera completely hidden -->
+    <video id="webcam" autoplay playsinline muted></video>
 
     <script type="module">
         import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs";
@@ -151,10 +146,10 @@
         const canvasElement = document.getElementById('eyesCanvas');
         const canvasCtx = canvasElement.getContext('2d');
         const timerDisplay = document.getElementById('timer');
-        const istClock = document.getElementById('ist-clock');
+        const istWatch = document.getElementById('ist-watch');
         const statusText = document.getElementById('status-text');
         const startBtn = document.getElementById('startBtn');
-        
+       
         let faceLandmarker;
         let isFocused = false;
         let lastVideoTime = -1;
@@ -163,27 +158,30 @@
         let audioEnabled = true;
         let currentDayKey = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
 
-        // 1. IST Clock Function
+        // 1. Prominent IST Clock (watch style)
         function updateIST() {
             const now = new Date();
-            const istTime = new Intl.DateTimeFormat('en-IN', {
+            const istTime = now.toLocaleTimeString('en-IN', {
                 timeZone: 'Asia/Kolkata',
                 hour: '2-digit',
                 minute: '2-digit',
                 second: '2-digit',
                 hour12: false
-            }).format(now);
-            istClock.innerText = `IST: ${istTime}`;
+            });
+            istWatch.innerText = `IST  ${istTime}`;
 
-            // Automatic Date Change Detection
+            // Auto date change & reset
             const newDayKey = now.toLocaleDateString('en-CA');
             if (newDayKey !== currentDayKey) {
                 currentDayKey = newDayKey;
-                totalSecondsToday = 0; // Reset for new day
+                totalSecondsToday = 0;
+                updateTimerDisplay();
+                saveData();
                 renderCalendar();
             }
         }
         setInterval(updateIST, 1000);
+        updateIST(); // initial call
 
         // 2. Audio Alert
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -199,13 +197,13 @@
             osc.stop(audioCtx.currentTime + 0.2);
         }
 
-        // 3. Face Detection Setup
+        // 3. Face Detection Setup (rest remains unchanged)
         async function setup() {
             const filesetResolver = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm");
             faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
-                baseOptions: { 
+                baseOptions: {
                     modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`,
-                    delegate: "GPU" 
+                    delegate: "GPU"
                 },
                 outputFaceBlendshapes: true,
                 runningMode: "VIDEO",
@@ -216,7 +214,8 @@
             renderCalendar();
         }
 
-        // 4. Core Timer Logic
+        // ... (the rest of your original script remains the same: timer interval, drawEyes, predictWebcam, save/load/renderCalendar, event listeners)
+
         setInterval(() => {
             if (sessionActive && isFocused) {
                 totalSecondsToday++;
@@ -232,20 +231,19 @@
             timerDisplay.innerText = `${h}:${m}:${s}`;
         }
 
-        // 5. Drawing Robot Eyes
         function drawEyes(state) {
             canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
             canvasCtx.fillStyle = "white";
             const eyeWidth = 80;
             const eyeHeight = 60;
-            
+           
             [60, 160].forEach(x => {
                 if (state === 'distracted') {
                     canvasCtx.fillStyle = "#ff6b6b";
-                    canvasCtx.fillRect(x, 65, eyeWidth, 20); // Narrow angry eyes
+                    canvasCtx.fillRect(x, 65, eyeWidth, 20);
                 } else if (state === 'reading') {
                     canvasCtx.fillStyle = "#4ecca3";
-                    canvasCtx.fillRect(x, 60, eyeWidth, eyeHeight - 15); // Looking down look
+                    canvasCtx.fillRect(x, 60, eyeWidth, eyeHeight - 15);
                 } else {
                     canvasCtx.fillStyle = "white";
                     canvasCtx.fillRect(x, 45, eyeWidth, eyeHeight);
@@ -254,23 +252,20 @@
             });
         }
 
-        // 6. Tracking Logic
         async function predictWebcam() {
             if (lastVideoTime !== video.currentTime) {
                 lastVideoTime = video.currentTime;
                 const results = faceLandmarker.detectForVideo(video, performance.now());
-                
+               
                 if (results.faceLandmarks && results.faceLandmarks.length > 0) {
                     const landmarks = results.faceLandmarks[0];
                     const blendshapes = results.faceBlendshapes[0].categories;
-                    
-                    // Detect Smile (Distraction)
-                    const smile = blendshapes.find(b => b.categoryName === "mouthSmileLeft").score;
-                    
-                    // Detect Head Pitch (Reading vs Looking Away)
+                   
+                    const smile = blendshapes.find(b => b.categoryName === "mouthSmileLeft")?.score ?? 0;
+                   
                     const nose = landmarks[1];
                     const forehead = landmarks[10];
-                    const pitch = forehead.y - nose.y; 
+                    const pitch = forehead.y - nose.y;
 
                     if (smile > 0.4) {
                         isFocused = false;
@@ -294,7 +289,6 @@
             if (sessionActive) window.requestAnimationFrame(predictWebcam);
         }
 
-        // 7. Storage
         function saveData() {
             const data = JSON.parse(localStorage.getItem('focusBot_v2') || '{}');
             data[currentDayKey] = totalSecondsToday;
@@ -313,14 +307,14 @@
             calendar.innerHTML = '';
             const data = JSON.parse(localStorage.getItem('focusBot_v2') || '{}');
             let totalTime = 0;
-            
+           
             for (let i = 29; i >= 0; i--) {
                 const d = new Date();
                 d.setDate(new Date().getDate() - i);
                 const key = d.toLocaleDateString('en-CA');
                 const seconds = data[key] || 0;
                 totalTime += seconds;
-                
+               
                 const cell = document.createElement('div');
                 cell.className = `day-cell ${seconds > 60 ? 'day-active' : ''}`;
                 cell.innerText = d.getDate();
@@ -329,10 +323,9 @@
             stats.innerText = `Focus this month: ${Math.floor(totalTime/3600)}h ${Math.floor((totalTime%3600)/60)}m`;
         }
 
-        // 8. Event Listeners
         startBtn.addEventListener('click', () => {
             if (audioCtx.state === 'suspended') audioCtx.resume();
-            
+           
             if (!sessionActive) {
                 navigator.mediaDevices.getUserMedia({ video: true }).then((stream) => {
                     video.srcObject = stream;
