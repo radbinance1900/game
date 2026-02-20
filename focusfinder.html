@@ -1,433 +1,340 @@
-
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>FocusFinder</title>
-    <!-- Pixel square font -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FocusBot Companion</title>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs" type="module"></script>
     <style>
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
+        :root {
+            --bg-color: #000;
+            --text-color: #fff;
+            --accent-color: #4ecca3;
+            --warn-color: #ff6b6b;
+        }
 
-      body {
-        min-height: 100vh;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        background: #000000;
-        font-family: system-ui, -apple-system, sans-serif;
-      }
+        body {
+            margin: 0;
+            background: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Press Start 2P', cursive;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow-x: hidden;
+            touch-action: manipulation;
+        }
 
-      #app {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 20px;
-      }
+        /* Robot Eyes Container */
+        #robot-container {
+            margin-top: 50px;
+            position: relative;
+            width: 300px;
+            height: 150px;
+        }
 
-      #display {
-        /* Eyes canvas - native 128x64 scaled up */
-        width: 512px;
-        height: 256px;
-        background: #000;
-        border-radius: 12px;
-        transition: filter 1s ease;
-      }
+        canvas#eyesCanvas {
+            width: 100%;
+            image-rendering: pixelated;
+        }
 
-      /* Red eyes when distracted for too long */
-      #display.red-eyes {
-        filter: sepia(100%) saturate(300%) hue-rotate(-20deg);
-      }
+        /* Timer Display */
+        #timer {
+            font-size: 3rem;
+            margin: 20px 0;
+            transition: color 0.3s;
+        }
 
-      #timer {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 512px;
-        height: 56px;
-        background: #000;
-        border-radius: 12px;
-        font-family: 'Press Start 2P', monospace;
-        font-size: 28px;
-        font-weight: normal;
-        letter-spacing: 3px;
-        color: #ffffff;
-        transition: color 0.5s ease, text-shadow 0.5s ease;
-      }
+        .distracted #timer { color: var(--warn-color); text-shadow: 0 0 10px red; }
+        .focused #timer { color: var(--accent-color); }
 
-      /* Distracted state - stays visible, warms up to red */
-      #timer.distracted {
-        color: #ff6b6b;
-        text-shadow: 0 0 10px rgba(255, 100, 100, 0.5);
-        animation: distracted-pulse 1s ease-in-out infinite;
-      }
+        /* Camera Feed (Hidden or Small) */
+        #video-container {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            width: 120px;
+            height: 90px;
+            border: 2px solid #333;
+            border-radius: 8px;
+            overflow: hidden;
+            z-index: 100;
+        }
+        
+        #webcam { width: 100%; height: 100%; transform: scaleX(-1); object-fit: cover; }
 
-      /* Warning states - progressive urgency */
-      #timer.warning-low {
-        color: #ffcc66;
-        text-shadow: 0 0 5px rgba(255, 200, 100, 0.3);
-      }
+        /* Calendar Styling */
+        #stats-panel {
+            width: 90%;
+            max-width: 500px;
+            background: #111;
+            padding: 20px;
+            border: 4px solid #333;
+            margin-top: 30px;
+            font-size: 10px;
+            line-height: 1.5;
+        }
 
-      #timer.warning-medium {
-        color: #ff9944;
-        text-shadow: 0 0 8px rgba(255, 150, 50, 0.4);
-      }
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 5px;
+            margin-top: 10px;
+        }
 
-      #timer.warning-high {
-        color: #ff5533;
-        text-shadow: 0 0 12px rgba(255, 80, 50, 0.6);
-        animation: urgent-pulse 0.5s ease-in-out infinite;
-      }
+        .day-cell {
+            aspect-ratio: 1;
+            background: #222;
+            border-radius: 2px;
+            font-size: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
 
-      #timer.warning-critical {
-        color: #ff2222;
-        text-shadow: 0 0 15px rgba(255, 30, 30, 0.8);
-        animation: critical-pulse 0.3s ease-in-out infinite;
-      }
+        .day-active { background: var(--accent-color); color: #000; }
 
-      @keyframes distracted-pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.7; }
-      }
+        /* Controls */
+        #controls { margin-top: 20px; display: flex; gap: 10px; }
+        button {
+            padding: 10px 15px;
+            font-family: 'Press Start 2P';
+            font-size: 10px;
+            background: #333;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover { background: #555; }
 
-      @keyframes urgent-pulse {
-        0%, 100% { opacity: 1; transform: scale(1); }
-        50% { opacity: 0.8; transform: scale(1.02); }
-      }
-
-      @keyframes critical-pulse {
-        0%, 100% { opacity: 1; transform: scale(1); }
-        50% { opacity: 0.9; transform: scale(1.05); }
-      }
-
-      /* Status bar - Brutalist */
-      #status {
-        font-family: monospace;
-        font-size: 11px;
-        text-align: center;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        padding: 8px 16px;
-        background: #000;
-        border: 2px solid #333;
-        color: #666;
-      }
-
-      #status.loading {
-        color: #f0a500;
-        border-color: #f0a500;
-      }
-
-      #status.ready {
-        color: #4ecca3;
-        border-color: #4ecca3;
-      }
-
-      #status.error {
-        color: #ff6b6b;
-        border-color: #ff6b6b;
-      }
-
-      /* Camera preview with overlay for debug - Brutalist */
-      #camera-container {
-        position: relative;
-        width: 320px;
-        height: 240px;
-        border: 2px solid #fff;
-        background: #000;
-      }
-
-      #camera {
-        width: 320px;
-        height: 240px;
-        transform: scaleX(-1); /* Mirror the camera */
-        display: block;
-      }
-
-      #camera-overlay {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 320px;
-        height: 240px;
-        pointer-events: none;
-        transform: scaleX(-1); /* Mirror to match video */
-      }
-
-      /* Debug panel - Brutalist */
-      #debug {
-        font-family: monospace;
-        font-size: 11px;
-        text-align: left;
-        width: 320px;
-        padding: 0;
-        background: #000;
-        border: 2px solid #fff;
-        min-height: 60px;
-        color: #888;
-      }
-
-      #debug-header {
-        background: #fff;
-        color: #000;
-        padding: 6px 10px;
-        font-weight: bold;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        font-size: 10px;
-      }
-
-      #debug-content {
-        padding: 10px;
-      }
-
-      #debug-content div {
-        margin-bottom: 4px;
-      }
-
-      #debug-content div:last-child {
-        margin-bottom: 0;
-      }
-
-      /* Debug toggle button */
-      #debug-toggle {
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        border: 1px solid #333;
-        background: #111;
-        color: #666;
-        font-size: 18px;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: all 0.2s, opacity 0.3s ease;
-        opacity: 1;
-      }
-
-      #debug-toggle:hover {
-        background: #222;
-        color: #fff;
-        border-color: #555;
-      }
-
-      #debug-toggle.active {
-        color: #4ecca3;
-        border-color: #4ecca3;
-      }
-
-      #debug-toggle.hidden-inactive {
-        opacity: 0;
-        pointer-events: none;
-      }
-
-      /* Debug settings panel - Brutalist UI */
-      #debug-settings {
-        position: fixed;
-        bottom: 70px;
-        right: 20px;
-        background: #000;
-        border: 2px solid #fff;
-        padding: 0;
-        font-family: monospace;
-        font-size: 11px;
-        min-width: 180px;
-        display: none;
-        z-index: 100;
-      }
-
-      #debug-settings.visible {
-        display: block;
-      }
-
-      #debug-settings-header {
-        background: #fff;
-        color: #000;
-        padding: 8px 12px;
-        font-weight: bold;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        font-size: 10px;
-      }
-
-      .debug-setting-row {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 10px 12px;
-        border-bottom: 1px solid #333;
-        color: #fff;
-      }
-
-      .debug-setting-row:last-child {
-        border-bottom: none;
-      }
-
-      .debug-setting-label {
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        font-size: 10px;
-      }
-
-      /* Brutalist toggle switch */
-      .brutalist-toggle {
-        position: relative;
-        width: 40px;
-        height: 20px;
-        background: #000;
-        border: 2px solid #666;
-        cursor: pointer;
-        transition: border-color 0.15s;
-      }
-
-      .brutalist-toggle::after {
-        content: '';
-        position: absolute;
-        top: 2px;
-        left: 2px;
-        width: 12px;
-        height: 12px;
-        background: #666;
-        transition: transform 0.15s, background 0.15s;
-      }
-
-      .brutalist-toggle.on {
-        border-color: #fff;
-      }
-
-      .brutalist-toggle.on::after {
-        transform: translateX(20px);
-        background: #fff;
-      }
-
-      .brutalist-toggle:hover {
-        border-color: #888;
-      }
-
-      .brutalist-toggle.on:hover {
-        border-color: #ccc;
-      }
-
-      /* Hide debug elements when not active */
-      .debug-hidden #camera-container,
-      .debug-hidden #status,
-      .debug-hidden #debug {
-        display: none;
-      }
+        #status-text {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #666;
+        }
     </style>
-    <script type="module" crossorigin src="/assets/index-Trc84Ehr.js"></script>
-  </head>
-  <body>
-    <div id="app">
-      <canvas id="display" width="512" height="256"></canvas>
-      <div id="timer">00:00</div>
-      <div id="camera-container">
-        <video id="camera" autoplay playsinline></video>
-        <canvas id="camera-overlay" width="320" height="240"></canvas>
-      </div>
-      <div id="status" class="loading">Loading face detection model...</div>
-      <div id="debug">
-        <div id="debug-header">Debug</div>
-        <div id="debug-content">Waiting for data...</div>
-      </div>
-    </div>
-    <button id="debug-toggle" title="Toggle debug mode">⚙</button>
+</head>
+<body>
 
-    <!-- Debug Settings Panel - Brutalist UI -->
-    <div id="debug-settings">
-      <div id="debug-settings-header">Settings</div>
-      <div class="debug-setting-row">
-        <span class="debug-setting-label">Audio</span>
-        <div id="toggle-audio" class="brutalist-toggle on" title="Toggle sound effects"></div>
-      </div>
-      <div class="debug-setting-row">
-        <span class="debug-setting-label">Debug View</span>
-        <div id="toggle-debug-view" class="brutalist-toggle" title="Show debug info"></div>
-      </div>
+    <div id="robot-container">
+        <canvas id="eyesCanvas" width="300" height="150"></canvas>
     </div>
 
-    <script>
-      // Debug toggle & settings
-      const toggle = document.getElementById('debug-toggle');
-      const app = document.getElementById('app');
-      const settingsPanel = document.getElementById('debug-settings');
-      const toggleAudio = document.getElementById('toggle-audio');
-      const toggleDebugView = document.getElementById('toggle-debug-view');
+    <div id="timer">00:00:00</div>
+    <div id="status-text">INITIALIZING...</div>
 
-      let inactivityTimer = null;
-      const INACTIVITY_TIMEOUT = 5000;
+    <div id="controls">
+        <button id="startBtn">START SESSION</button>
+        <button id="toggleAudio">SOUND: ON</button>
+    </div>
 
-      // Show/hide settings panel on gear click
-      toggle.addEventListener('click', (e) => {
-        e.stopPropagation();
-        settingsPanel.classList.toggle('visible');
-        toggle.classList.toggle('active', settingsPanel.classList.contains('visible'));
-        resetInactivityTimer();
-      });
+    <div id="stats-panel">
+        <div>FOCUS HISTORY (LAST 30 DAYS)</div>
+        <div id="calendar" class="calendar-grid"></div>
+        <p id="total-stats" style="margin-top: 15px;"></p>
+    </div>
 
-      // Audio toggle
-      toggleAudio.addEventListener('click', () => {
-        toggleAudio.classList.toggle('on');
-        const enabled = toggleAudio.classList.contains('on');
-        // Dispatch custom event for main.ts to handle
-        window.dispatchEvent(new CustomEvent('audioToggle', { detail: { enabled } }));
-        resetInactivityTimer();
-      });
+    <div id="video-container">
+        <video id="webcam" autoplay playsinline></video>
+    </div>
 
-      // Debug view toggle
-      toggleDebugView.addEventListener('click', () => {
-        toggleDebugView.classList.toggle('on');
-        const showDebug = toggleDebugView.classList.contains('on');
-        app.classList.toggle('debug-hidden', !showDebug);
-        resetInactivityTimer();
-      });
+    <script type="module">
+        import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs";
 
-      // Close settings panel when clicking outside
-      document.addEventListener('click', (e) => {
-        if (!settingsPanel.contains(e.target) && e.target !== toggle) {
-          settingsPanel.classList.remove('visible');
-          toggle.classList.remove('active');
+        const video = document.getElementById('webcam');
+        const canvasElement = document.getElementById('eyesCanvas');
+        const canvasCtx = canvasElement.getContext('2d');
+        const timerDisplay = document.getElementById('timer');
+        const statusText = document.getElementById('status-text');
+        const startBtn = document.getElementById('startBtn');
+        
+        let faceLandmarker;
+        let runningMode = "VIDEO";
+        let isFocused = false;
+        let lastVideoTime = -1;
+        let totalSecondsToday = 0;
+        let sessionActive = false;
+        let audioEnabled = true;
+
+        // Sound Engine
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playAlert() {
+            if (!audioEnabled) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.1);
         }
-      });
 
-      // Inactivity auto-hide for debug toggle button
-      function hideToggleButton() {
-        // Only hide if settings panel is not open
-        if (!settingsPanel.classList.contains('visible')) {
-          toggle.classList.add('hidden-inactive');
+        // Initialize Logic
+        async function setup() {
+            const filesetResolver = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm");
+            faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
+                baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task`, delegate: "GPU" },
+                outputFaceBlendshapes: true,
+                runningMode: runningMode,
+                numFaces: 1
+            });
+            statusText.innerText = "READY. CLICK START.";
+            loadSavedData();
+            renderCalendar();
         }
-      }
 
-      function showToggleButton() {
-        toggle.classList.remove('hidden-inactive');
-      }
+        // Timer Logic
+        setInterval(() => {
+            if (sessionActive && isFocused) {
+                totalSecondsToday++;
+                updateTimerDisplay();
+                saveData();
+            }
+        }, 1000);
 
-      function resetInactivityTimer() {
-        showToggleButton();
-        clearTimeout(inactivityTimer);
-        inactivityTimer = setTimeout(hideToggleButton, INACTIVITY_TIMEOUT);
-      }
+        function updateTimerDisplay() {
+            const h = Math.floor(totalSecondsToday / 3600).toString().padStart(2, '0');
+            const m = Math.floor((totalSecondsToday % 3600) / 60).toString().padStart(2, '0');
+            const s = (totalSecondsToday % 60).toString().padStart(2, '0');
+            timerDisplay.innerText = `${h}:${m}:${s}`;
+        }
 
-      // Track user activity
-      ['mousemove', 'mousedown', 'touchstart', 'touchmove', 'keydown', 'scroll'].forEach(event => {
-        document.addEventListener(event, resetInactivityTimer, { passive: true });
-      });
+        // Robot Eye Drawing
+        function drawEyes(state) {
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            canvasCtx.fillStyle = "white";
+            
+            const eyeWidth = 80;
+            const eyeHeight = 60;
+            const y = 45;
+            
+            // Draw Left & Right Eye
+            [60, 160].forEach(x => {
+                if (state === 'distracted') {
+                    // Angry/Squinting eyes
+                    canvasCtx.fillRect(x, y + 20, eyeWidth, eyeHeight - 20);
+                } else if (state === 'reading') {
+                    // Looking down
+                    canvasCtx.fillRect(x, y + 10, eyeWidth, eyeHeight - 10);
+                } else {
+                    // Normal eyes (from your image)
+                    canvasCtx.fillRect(x, y, eyeWidth, eyeHeight);
+                    canvasCtx.clearRect(x, y + eyeHeight - 10, eyeWidth, 10); // Curve bottom
+                }
+            });
+        }
 
-      // Start with debug hidden and begin inactivity timer
-      app.classList.add('debug-hidden');
-      resetInactivityTimer();
+        // Tracking Logic
+        async function predictWebcam() {
+            if (lastVideoTime !== video.currentTime) {
+                lastVideoTime = video.currentTime;
+                const results = faceLandmarker.detectForVideo(video, performance.now());
+                
+                if (results.faceLandmarks && results.faceLandmarks.length > 0) {
+                    const landmarks = results.faceLandmarks[0];
+                    const blendshapes = results.faceBlendshapes[0].categories;
+                    
+                    // Detection Rules:
+                    // 1. Laughing/Smiling (Distracted)
+                    const smileScore = blendshapes.find(b => b.categoryName === "mouthSmileLeft").score;
+                    const isLaughing = smileScore > 0.4;
+
+                    // 2. Looking down (Focused/Reading)
+                    // We check if the eye pupils are lower than the eye center or head pitch
+                    const nose = landmarks[1];
+                    const forehead = landmarks[10];
+                    const pitch = forehead.y - nose.y; 
+
+                    if (isLaughing) {
+                        isFocused = false;
+                        statusText.innerText = "STOP LAUGHING! GET TO WORK!";
+                        document.body.className = "distracted";
+                        drawEyes('distracted');
+                        playAlert();
+                    } else {
+                        isFocused = true;
+                        document.body.className = "focused";
+                        statusText.innerText = "FOCUSING...";
+                        drawEyes(pitch > 0.15 ? 'reading' : 'normal');
+                    }
+                } else {
+                    isFocused = false;
+                    statusText.innerText = "WHERE DID YOU GO?";
+                    document.body.className = "distracted";
+                    drawEyes('distracted');
+                }
+            }
+            if (sessionActive) window.requestAnimationFrame(predictWebcam);
+        }
+
+        // Persistence Logic
+        function getTodayKey() {
+            return new Date().toISOString().split('T')[0];
+        }
+
+        function saveData() {
+            const data = JSON.parse(localStorage.getItem('focusBot_logs') || '{}');
+            data[getTodayKey()] = totalSecondsToday;
+            localStorage.setItem('focusBot_logs', JSON.stringify(data));
+        }
+
+        function loadSavedData() {
+            const data = JSON.parse(localStorage.getItem('focusBot_logs') || '{}');
+            totalSecondsToday = data[getTodayKey()] || 0;
+            updateTimerDisplay();
+        }
+
+        function renderCalendar() {
+            const calendar = document.getElementById('calendar');
+            const stats = document.getElementById('total-stats');
+            calendar.innerHTML = '';
+            const data = JSON.parse(localStorage.getItem('focusBot_logs') || '{}');
+            
+            let totalAllTime = 0;
+            const now = new Date();
+            
+            for (let i = 29; i >= 0; i--) {
+                const d = new Date();
+                d.setDate(now.getDate() - i);
+                const key = d.toISOString().split('T')[0];
+                const seconds = data[key] || 0;
+                totalAllTime += seconds;
+                
+                const cell = document.createElement('div');
+                cell.className = `day-cell ${seconds > 0 ? 'day-active' : ''}`;
+                cell.title = `${key}: ${Math.round(seconds/60)} mins`;
+                cell.innerText = d.getDate();
+                calendar.appendChild(cell);
+            }
+            stats.innerText = `Total Study this month: ${Math.floor(totalAllTime/3600)}h ${Math.floor((totalAllTime%3600)/60)}m`;
+        }
+
+        // UI Events
+        startBtn.addEventListener('click', () => {
+            if (!sessionActive) {
+                navigator.mediaDevices.getUserMedia({ video: true }).then((stream) => {
+                    video.srcObject = stream;
+                    sessionActive = true;
+                    startBtn.innerText = "PAUSE SESSION";
+                    predictWebcam();
+                });
+            } else {
+                sessionActive = false;
+                startBtn.innerText = "RESUME SESSION";
+                statusText.innerText = "PAUSED";
+            }
+        });
+
+        document.getElementById('toggleAudio').addEventListener('click', (e) => {
+            audioEnabled = !audioEnabled;
+            e.target.innerText = `SOUND: ${audioEnabled ? 'ON' : 'OFF'}`;
+        });
+
+        setup();
+        drawEyes('normal');
     </script>
-  </body>
+</body>
 </html>
