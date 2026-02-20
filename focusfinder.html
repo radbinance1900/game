@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Private FocusFinder</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_detection"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/face-detection"></script>
+    
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #121212; color: white; }
+        #container { position: relative; margin-top: 20px; }
+        video, canvas { position: absolute; top: 0; left: 0; border-radius: 10px; }
+        #status { margin-top: 500px; font-size: 1.5rem; padding: 10px; border-radius: 5px; }
+        .focused { background: green; }
+        .distracted { background: red; }
+    </style>
+</head>
+<body>
+
+    <h1>Private Focus Finder</h1>
+    <div id="status" class="distracted">Initializing AI...</div>
+
+    <div id="container">
+        <video id="webcam" autoplay playsinline width="640" height="480"></video>
+        <canvas id="output"></canvas>
+    </div>
+
+    <script>
+        const video = document.getElementById('webcam');
+        const canvas = document.getElementById('output');
+        const statusDiv = document.getElementById('status');
+        const ctx = canvas.getContext('2d');
+
+        async function setupCamera() {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            video.srcObject = stream;
+            return new Promise((resolve) => {
+                video.onloadedmetadata = () => resolve(video);
+            });
+        }
+
+        async function main() {
+            const model = faceDetection.SupportedModels.MediaPipeFaceDetector;
+            const detector = await faceDetection.createDetector(model, { runtime: 'tfjs' });
+            
+            await setupCamera();
+            video.play();
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+
+            statusDiv.innerText = "Scanning for Face...";
+
+            async function detect() {
+                const faces = await detector.estimateFaces(video);
+                
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                if (faces.length > 0) {
+                    statusDiv.innerText = "STATUS: FOCUSING";
+                    statusDiv.className = "focused";
+                    
+                    // Draw box around face (Visual debug)
+                    faces.forEach(face => {
+                        ctx.strokeStyle = "#00FF00";
+                        ctx.lineWidth = 2;
+                        ctx.strokeRect(face.box.xMin, face.box.yMin, face.box.width, face.box.height);
+                    });
+                } else {
+                    statusDiv.innerText = "STATUS: DISTRACTED / NOT AT DESK";
+                    statusDiv.className = "distracted";
+                }
+
+                requestAnimationFrame(detect);
+            }
+            detect();
+        }
+
+        main();
+    </script>
+</body>
+</html>
