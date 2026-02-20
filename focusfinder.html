@@ -1,84 +1,433 @@
+
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Private FocusFinder</title>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_detection"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/face-detection"></script>
-    
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FocusFinder</title>
+    <!-- Pixel square font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <style>
-        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #121212; color: white; }
-        #container { position: relative; margin-top: 20px; }
-        video, canvas { position: absolute; top: 0; left: 0; border-radius: 10px; }
-        #status { margin-top: 500px; font-size: 1.5rem; padding: 10px; border-radius: 5px; }
-        .focused { background: green; }
-        .distracted { background: red; }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: #000000;
+        font-family: system-ui, -apple-system, sans-serif;
+      }
+
+      #app {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 20px;
+      }
+
+      #display {
+        /* Eyes canvas - native 128x64 scaled up */
+        width: 512px;
+        height: 256px;
+        background: #000;
+        border-radius: 12px;
+        transition: filter 1s ease;
+      }
+
+      /* Red eyes when distracted for too long */
+      #display.red-eyes {
+        filter: sepia(100%) saturate(300%) hue-rotate(-20deg);
+      }
+
+      #timer {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 512px;
+        height: 56px;
+        background: #000;
+        border-radius: 12px;
+        font-family: 'Press Start 2P', monospace;
+        font-size: 28px;
+        font-weight: normal;
+        letter-spacing: 3px;
+        color: #ffffff;
+        transition: color 0.5s ease, text-shadow 0.5s ease;
+      }
+
+      /* Distracted state - stays visible, warms up to red */
+      #timer.distracted {
+        color: #ff6b6b;
+        text-shadow: 0 0 10px rgba(255, 100, 100, 0.5);
+        animation: distracted-pulse 1s ease-in-out infinite;
+      }
+
+      /* Warning states - progressive urgency */
+      #timer.warning-low {
+        color: #ffcc66;
+        text-shadow: 0 0 5px rgba(255, 200, 100, 0.3);
+      }
+
+      #timer.warning-medium {
+        color: #ff9944;
+        text-shadow: 0 0 8px rgba(255, 150, 50, 0.4);
+      }
+
+      #timer.warning-high {
+        color: #ff5533;
+        text-shadow: 0 0 12px rgba(255, 80, 50, 0.6);
+        animation: urgent-pulse 0.5s ease-in-out infinite;
+      }
+
+      #timer.warning-critical {
+        color: #ff2222;
+        text-shadow: 0 0 15px rgba(255, 30, 30, 0.8);
+        animation: critical-pulse 0.3s ease-in-out infinite;
+      }
+
+      @keyframes distracted-pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+      }
+
+      @keyframes urgent-pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.8; transform: scale(1.02); }
+      }
+
+      @keyframes critical-pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.9; transform: scale(1.05); }
+      }
+
+      /* Status bar - Brutalist */
+      #status {
+        font-family: monospace;
+        font-size: 11px;
+        text-align: center;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        padding: 8px 16px;
+        background: #000;
+        border: 2px solid #333;
+        color: #666;
+      }
+
+      #status.loading {
+        color: #f0a500;
+        border-color: #f0a500;
+      }
+
+      #status.ready {
+        color: #4ecca3;
+        border-color: #4ecca3;
+      }
+
+      #status.error {
+        color: #ff6b6b;
+        border-color: #ff6b6b;
+      }
+
+      /* Camera preview with overlay for debug - Brutalist */
+      #camera-container {
+        position: relative;
+        width: 320px;
+        height: 240px;
+        border: 2px solid #fff;
+        background: #000;
+      }
+
+      #camera {
+        width: 320px;
+        height: 240px;
+        transform: scaleX(-1); /* Mirror the camera */
+        display: block;
+      }
+
+      #camera-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 320px;
+        height: 240px;
+        pointer-events: none;
+        transform: scaleX(-1); /* Mirror to match video */
+      }
+
+      /* Debug panel - Brutalist */
+      #debug {
+        font-family: monospace;
+        font-size: 11px;
+        text-align: left;
+        width: 320px;
+        padding: 0;
+        background: #000;
+        border: 2px solid #fff;
+        min-height: 60px;
+        color: #888;
+      }
+
+      #debug-header {
+        background: #fff;
+        color: #000;
+        padding: 6px 10px;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        font-size: 10px;
+      }
+
+      #debug-content {
+        padding: 10px;
+      }
+
+      #debug-content div {
+        margin-bottom: 4px;
+      }
+
+      #debug-content div:last-child {
+        margin-bottom: 0;
+      }
+
+      /* Debug toggle button */
+      #debug-toggle {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        border: 1px solid #333;
+        background: #111;
+        color: #666;
+        font-size: 18px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s, opacity 0.3s ease;
+        opacity: 1;
+      }
+
+      #debug-toggle:hover {
+        background: #222;
+        color: #fff;
+        border-color: #555;
+      }
+
+      #debug-toggle.active {
+        color: #4ecca3;
+        border-color: #4ecca3;
+      }
+
+      #debug-toggle.hidden-inactive {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      /* Debug settings panel - Brutalist UI */
+      #debug-settings {
+        position: fixed;
+        bottom: 70px;
+        right: 20px;
+        background: #000;
+        border: 2px solid #fff;
+        padding: 0;
+        font-family: monospace;
+        font-size: 11px;
+        min-width: 180px;
+        display: none;
+        z-index: 100;
+      }
+
+      #debug-settings.visible {
+        display: block;
+      }
+
+      #debug-settings-header {
+        background: #fff;
+        color: #000;
+        padding: 8px 12px;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        font-size: 10px;
+      }
+
+      .debug-setting-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 12px;
+        border-bottom: 1px solid #333;
+        color: #fff;
+      }
+
+      .debug-setting-row:last-child {
+        border-bottom: none;
+      }
+
+      .debug-setting-label {
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-size: 10px;
+      }
+
+      /* Brutalist toggle switch */
+      .brutalist-toggle {
+        position: relative;
+        width: 40px;
+        height: 20px;
+        background: #000;
+        border: 2px solid #666;
+        cursor: pointer;
+        transition: border-color 0.15s;
+      }
+
+      .brutalist-toggle::after {
+        content: '';
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 12px;
+        height: 12px;
+        background: #666;
+        transition: transform 0.15s, background 0.15s;
+      }
+
+      .brutalist-toggle.on {
+        border-color: #fff;
+      }
+
+      .brutalist-toggle.on::after {
+        transform: translateX(20px);
+        background: #fff;
+      }
+
+      .brutalist-toggle:hover {
+        border-color: #888;
+      }
+
+      .brutalist-toggle.on:hover {
+        border-color: #ccc;
+      }
+
+      /* Hide debug elements when not active */
+      .debug-hidden #camera-container,
+      .debug-hidden #status,
+      .debug-hidden #debug {
+        display: none;
+      }
     </style>
-</head>
-<body>
+    <script type="module" crossorigin src="/assets/index-Trc84Ehr.js"></script>
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="display" width="512" height="256"></canvas>
+      <div id="timer">00:00</div>
+      <div id="camera-container">
+        <video id="camera" autoplay playsinline></video>
+        <canvas id="camera-overlay" width="320" height="240"></canvas>
+      </div>
+      <div id="status" class="loading">Loading face detection model...</div>
+      <div id="debug">
+        <div id="debug-header">Debug</div>
+        <div id="debug-content">Waiting for data...</div>
+      </div>
+    </div>
+    <button id="debug-toggle" title="Toggle debug mode">⚙</button>
 
-    <h1>Private Focus Finder</h1>
-    <div id="status" class="distracted">Initializing AI...</div>
-
-    <div id="container">
-        <video id="webcam" autoplay playsinline width="640" height="480"></video>
-        <canvas id="output"></canvas>
+    <!-- Debug Settings Panel - Brutalist UI -->
+    <div id="debug-settings">
+      <div id="debug-settings-header">Settings</div>
+      <div class="debug-setting-row">
+        <span class="debug-setting-label">Audio</span>
+        <div id="toggle-audio" class="brutalist-toggle on" title="Toggle sound effects"></div>
+      </div>
+      <div class="debug-setting-row">
+        <span class="debug-setting-label">Debug View</span>
+        <div id="toggle-debug-view" class="brutalist-toggle" title="Show debug info"></div>
+      </div>
     </div>
 
     <script>
-        const video = document.getElementById('webcam');
-        const canvas = document.getElementById('output');
-        const statusDiv = document.getElementById('status');
-        const ctx = canvas.getContext('2d');
+      // Debug toggle & settings
+      const toggle = document.getElementById('debug-toggle');
+      const app = document.getElementById('app');
+      const settingsPanel = document.getElementById('debug-settings');
+      const toggleAudio = document.getElementById('toggle-audio');
+      const toggleDebugView = document.getElementById('toggle-debug-view');
 
-        async function setupCamera() {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-            video.srcObject = stream;
-            return new Promise((resolve) => {
-                video.onloadedmetadata = () => resolve(video);
-            });
+      let inactivityTimer = null;
+      const INACTIVITY_TIMEOUT = 5000;
+
+      // Show/hide settings panel on gear click
+      toggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        settingsPanel.classList.toggle('visible');
+        toggle.classList.toggle('active', settingsPanel.classList.contains('visible'));
+        resetInactivityTimer();
+      });
+
+      // Audio toggle
+      toggleAudio.addEventListener('click', () => {
+        toggleAudio.classList.toggle('on');
+        const enabled = toggleAudio.classList.contains('on');
+        // Dispatch custom event for main.ts to handle
+        window.dispatchEvent(new CustomEvent('audioToggle', { detail: { enabled } }));
+        resetInactivityTimer();
+      });
+
+      // Debug view toggle
+      toggleDebugView.addEventListener('click', () => {
+        toggleDebugView.classList.toggle('on');
+        const showDebug = toggleDebugView.classList.contains('on');
+        app.classList.toggle('debug-hidden', !showDebug);
+        resetInactivityTimer();
+      });
+
+      // Close settings panel when clicking outside
+      document.addEventListener('click', (e) => {
+        if (!settingsPanel.contains(e.target) && e.target !== toggle) {
+          settingsPanel.classList.remove('visible');
+          toggle.classList.remove('active');
         }
+      });
 
-        async function main() {
-            const model = faceDetection.SupportedModels.MediaPipeFaceDetector;
-            const detector = await faceDetection.createDetector(model, { runtime: 'tfjs' });
-            
-            await setupCamera();
-            video.play();
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-
-            statusDiv.innerText = "Scanning for Face...";
-
-            async function detect() {
-                const faces = await detector.estimateFaces(video);
-                
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                
-                if (faces.length > 0) {
-                    statusDiv.innerText = "STATUS: FOCUSING";
-                    statusDiv.className = "focused";
-                    
-                    // Draw box around face (Visual debug)
-                    faces.forEach(face => {
-                        ctx.strokeStyle = "#00FF00";
-                        ctx.lineWidth = 2;
-                        ctx.strokeRect(face.box.xMin, face.box.yMin, face.box.width, face.box.height);
-                    });
-                } else {
-                    statusDiv.innerText = "STATUS: DISTRACTED / NOT AT DESK";
-                    statusDiv.className = "distracted";
-                }
-
-                requestAnimationFrame(detect);
-            }
-            detect();
+      // Inactivity auto-hide for debug toggle button
+      function hideToggleButton() {
+        // Only hide if settings panel is not open
+        if (!settingsPanel.classList.contains('visible')) {
+          toggle.classList.add('hidden-inactive');
         }
+      }
 
-        main();
+      function showToggleButton() {
+        toggle.classList.remove('hidden-inactive');
+      }
+
+      function resetInactivityTimer() {
+        showToggleButton();
+        clearTimeout(inactivityTimer);
+        inactivityTimer = setTimeout(hideToggleButton, INACTIVITY_TIMEOUT);
+      }
+
+      // Track user activity
+      ['mousemove', 'mousedown', 'touchstart', 'touchmove', 'keydown', 'scroll'].forEach(event => {
+        document.addEventListener(event, resetInactivityTimer, { passive: true });
+      });
+
+      // Start with debug hidden and begin inactivity timer
+      app.classList.add('debug-hidden');
+      resetInactivityTimer();
     </script>
-</body>
+  </body>
 </html>
